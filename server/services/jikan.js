@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const Anime = require('../models/Anime');
 
-const JIKAN = 'https://api.jikan.moe/v4';
+// Tenrai is a Jikan-v4-compatible public anime catalogue API.
+const ANIME_API = 'https://api.tenrai.org/v1';
 const cache = new Map();
 const TTL = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12000;
@@ -36,33 +37,35 @@ async function jikan(path, { fresh = false } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const res = await fetch(`${JIKAN}${path}`, {
+      const res = await fetch(`${ANIME_API}${path}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
 
-      if (!res.ok) throw new Error(`Jikan responded ${res.status}`);
+      if (!res.ok) throw new Error(`Anime API responded ${res.status}`);
       const json = await res.json();
       cache.set(path, { t: Date.now(), data: json });
       return json;
     } catch (err) {
-      lastError = err.name === 'AbortError' ? new Error('Jikan request timed out') : err;
+      lastError = err.name === 'AbortError'
+        ? new Error('Anime API request timed out')
+        : err;
     } finally {
       clearTimeout(timeout);
     }
 
     if (attempt < MAX_ATTEMPTS) {
-      // Retry rate limits and intermittent upstream/network errors with a small backoff.
+      // Retry temporary API/network failures with a small backoff.
       await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
     }
   }
 
   // Keep browsing usable with the last successful response if the upstream is temporarily down.
   if (hit) {
-    console.warn(`[jikan] using stale in-memory cache for ${path}: ${lastError?.message || 'upstream error'}`);
+    console.warn(`[anime-api] using stale in-memory cache for ${path}: ${lastError?.message || 'upstream error'}`);
     return hit.data;
   }
-  throw lastError || new Error('Jikan request failed');
+  throw lastError || new Error('Anime API request failed');
 }
 
 async function saveToDb(list) {
