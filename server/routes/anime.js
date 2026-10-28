@@ -3,6 +3,7 @@ const Anime = require('../models/Anime');
 const Comment = require('../models/Comment');
 const { jikan, normalize, saveToDb, dedupe, dbReady } = require('../services/jikan');
 const { getTrending, bump } = require('../services/trending');
+const { isConfigured: youtubeConfigured, searchOfficialEpisodes } = require('../services/youtubeEpisodes');
 const { requireAuth, needDb } = require('../middleware/auth');
 
 const router = express.Router();
@@ -58,6 +59,38 @@ router.get('/trending/now', async (req, res, next) => {
     res.json(await getTrending());
   } catch (err) {
     next(err);
+  }
+});
+
+// Search full-length, embeddable videos only from allowlisted official anime channels.
+router.get('/:id/episodes', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid id' });
+  if (!youtubeConfigured()) {
+    return res.json({
+      configured: false,
+      episodes: [],
+      message: 'Official in-page episodes require a YouTube Data API key in server/.env.',
+    });
+  }
+
+  try {
+    let anime = null;
+    if (dbReady()) anime = await Anime.findOne({ malId: id }).lean();
+
+    if (!anime) {
+      const json = await jikan(`/anime/${id}/full`);
+      if (!json.data) return res.status(404).json({ message: 'Anime not found' });
+      anime = normalize(json.data);
+      await saveToDb([anime]);
+    }
+
+    const title = String(req.query.title || anime.titleEnglish || anime.title || '').trim().slice(0, 120);
+    const episodes = await searchOfficialEpisodes(title);
+    return res.json({ configured: true, episodes });
+  } catch (err) {
+    console.warn(`[anime] official episode search for ${id} failed: ${err.message}`);
+    return res.status(502).json({ message: 'Could not search official episode videos right now.' });
   }
 });
 
