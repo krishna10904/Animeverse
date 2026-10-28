@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { pickTitle } from '../i18n';
 import { socket } from '../socket';
+import * as api from '../api';
 import { useAuth } from '../AuthContext';
 import Comments from './Comments';
 
 export default function Modal({ anime, lang, t, onClose }) {
   const { user, openAuth, toggleWatch } = useAuth();
   const [viewers, setViewers] = useState(0);
+  const [streaming, setStreaming] = useState([]);
+  const [streamingLoading, setStreamingLoading] = useState(false);
   const malId = anime?.malId;
 
   useEffect(() => {
@@ -18,6 +21,33 @@ export default function Modal({ anime, lang, t, onClose }) {
       document.body.style.overflow = '';
     };
   }, [onClose]);
+
+  // Load licensed/official streaming-provider pages separately from trailer metadata.
+  useEffect(() => {
+    if (!malId) {
+      setStreaming([]);
+      setStreamingLoading(false);
+      return;
+    }
+
+    let active = true;
+    setStreaming([]);
+    setStreamingLoading(true);
+    api.getStreamingProviders(malId)
+      .then((items) => {
+        if (active) setStreaming(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (active) setStreaming([]);
+      })
+      .finally(() => {
+        if (active) setStreamingLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [malId]);
 
   // join this anime's live room: viewer count + comments
   useEffect(() => {
@@ -73,6 +103,30 @@ export default function Modal({ anime, lang, t, onClose }) {
               <a className="btn ghost" href={anime.trailer} target="_blank" rel="noreferrer">▶ {t.trailer}</a>
             )}
           </div>
+
+          {(streamingLoading || streaming.length > 0) && (
+            <section className="streaming-section">
+              <h3>{t.watchOn}</h3>
+              {streamingLoading ? (
+                <p className="sub">{t.loadingStreams}</p>
+              ) : (
+                <div className="actions">
+                  {streaming.map((provider) => (
+                    <a
+                      key={provider.url}
+                      className="btn ghost"
+                      href={provider.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      ▶ {t.watchOn} {provider.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+              <p className="sub">{t.streamingNote}</p>
+            </section>
+          )}
 
           <Comments malId={malId} t={t} />
         </div>
