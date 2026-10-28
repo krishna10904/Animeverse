@@ -18,6 +18,7 @@ export const getLatest = () => request('/api/anime/latest');
 export const getTop = () => request('/api/anime/top');
 export const searchAnime = (q) => request(`/api/anime/search?q=${encodeURIComponent(q)}`);
 export const getAnime = (id) => request(`/api/anime/${id}`);
+export const getStreamingProviders = (id) => request(`/api/anime/${id}/streaming`);
 export const getTrending = () => request('/api/anime/trending/now');
 
 export const getComments = (id) => request(`/api/anime/${id}/comments`);
