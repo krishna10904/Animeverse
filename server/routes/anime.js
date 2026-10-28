@@ -24,7 +24,7 @@ async function respond(res, path, dbFallback) {
       }
     }
     res.status(502).json({
-      message: 'Could not reach the anime data source, and no cached anime are available. Check internet access to api.jikan.moe and try again.',
+      message: 'Could not reach the anime data source, and no cached anime are available. Check internet access to the anime data API and try again.',
     });
   }
 }
@@ -58,6 +58,26 @@ router.get('/trending/now', async (req, res, next) => {
     res.json(await getTrending());
   } catch (err) {
     next(err);
+  }
+});
+
+// Official streaming-provider links for this anime (catalogue metadata only; no episode video is hosted here).
+router.get('/:id/streaming', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: 'Invalid id' });
+
+  try {
+    const json = await jikan(`/anime/${id}/streaming`);
+    const providers = (json.data || [])
+      .filter((item) => item && typeof item.name === 'string' && typeof item.url === 'string')
+      .filter((item) => /^https?:\/\//i.test(item.url))
+      .map(({ name, url }) => ({ name, url }));
+    return res.json(providers);
+  } catch (err) {
+    console.warn(`[anime] streaming providers for ${id} failed: ${err.message}`);
+    return res.status(502).json({
+      message: 'Could not load official streaming-provider links right now.',
+    });
   }
 });
 
@@ -144,7 +164,7 @@ router.get('/:id', async (req, res) => {
       console.warn(`[anime] cached details lookup failed: ${dbError.message}`);
     }
     return res.status(502).json({
-      message: 'Could not reach the anime data source and this anime is not cached. Check internet access and try again.',
+      message: 'Could not reach the anime data source and this anime is not cached. Check internet access to the anime data API and try again.',
     });
   }
 });
