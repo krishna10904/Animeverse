@@ -47,15 +47,21 @@ async function jikan(path, { fresh = false } = {}) {
       return json;
     } catch (err) {
       lastError = err.name === 'AbortError' ? new Error('Jikan request timed out') : err;
-      if (attempt < MAX_ATTEMPTS) {
-        // Small backoff helps with temporary network failures and Jikan rate limits.
-        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
-      }
     } finally {
       clearTimeout(timeout);
     }
+
+    if (attempt < MAX_ATTEMPTS) {
+      // Retry rate limits and intermittent upstream/network errors with a small backoff.
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
   }
 
+  // Keep browsing usable with the last successful response if the upstream is temporarily down.
+  if (hit) {
+    console.warn(`[jikan] using stale in-memory cache for ${path}: ${lastError?.message || 'upstream error'}`);
+    return hit.data;
+  }
   throw lastError || new Error('Jikan request failed');
 }
 
