@@ -10,6 +10,11 @@ export default function Modal({ anime, lang, t, onClose }) {
   const [viewers, setViewers] = useState(0);
   const [streaming, setStreaming] = useState([]);
   const [streamingLoading, setStreamingLoading] = useState(false);
+  const [episodes, setEpisodes] = useState([]);
+  const [episodesConfigured, setEpisodesConfigured] = useState(false);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [episodesMessage, setEpisodesMessage] = useState('');
+  const [playingEpisode, setPlayingEpisode] = useState(null);
   const malId = anime?.malId;
 
   useEffect(() => {
@@ -21,6 +26,43 @@ export default function Modal({ anime, lang, t, onClose }) {
       document.body.style.overflow = '';
     };
   }, [onClose]);
+
+  // Search embeddable long-form videos from configured official anime YouTube channels only.
+  useEffect(() => {
+    if (!malId) {
+      setEpisodes([]);
+      setPlayingEpisode(null);
+      return;
+    }
+
+    let active = true;
+    setEpisodes([]);
+    setPlayingEpisode(null);
+    setEpisodesLoading(true);
+    setEpisodesMessage('');
+
+    api.getEpisodes(malId, anime.titleEnglish || anime.title)
+      .then((result) => {
+        if (!active) return;
+        setEpisodes(Array.isArray(result.episodes) ? result.episodes : []);
+        setEpisodesConfigured(Boolean(result.configured));
+        setEpisodesMessage(result.configured ? '' : (result.message || t.episodeSetup));
+      })
+      .catch((err) => {
+        if (active) {
+          setEpisodes([]);
+          setEpisodesConfigured(true);
+          setEpisodesMessage(err.message || t.episodeSearchError);
+        }
+      })
+      .finally(() => {
+        if (active) setEpisodesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [malId, anime?.titleEnglish, anime?.title, t.episodeSetup, t.episodeSearchError]);
 
   // Load licensed/official streaming-provider pages separately from trailer metadata.
   useEffect(() => {
@@ -127,6 +169,47 @@ export default function Modal({ anime, lang, t, onClose }) {
               <p className="sub">{t.streamingNote}</p>
             </section>
           )}
+
+          <section className="episodes-section">
+            <h3>{t.fullEpisodes}</h3>
+            {episodesLoading && <p className="sub">{t.loadingEpisodes}</p>}
+            {!episodesLoading && episodesMessage && <p className="sub">{episodesMessage}</p>}
+            {!episodesLoading && !episodesMessage && episodesConfigured && episodes.length === 0 && (
+              <p className="sub">{t.noEpisodes}</p>
+            )}
+
+            {playingEpisode && /^https:\/\/www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(playingEpisode.embedUrl) && (
+              <div className="episode-player">
+                <iframe
+                  src={playingEpisode.embedUrl}
+                  title={playingEpisode.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              </div>
+            )}
+
+            {episodes.length > 0 && (
+              <div className="episode-list">
+                {episodes.map((episode) => (
+                  <button
+                    key={episode.videoId}
+                    className={`episode-item ${playingEpisode?.videoId === episode.videoId ? 'active' : ''}`}
+                    onClick={() => setPlayingEpisode(episode)}
+                    type="button"
+                  >
+                    <span className="episode-play">▶</span>
+                    <span className="episode-copy">
+                      <strong>{episode.title}</strong>
+                      <small>{episode.channelTitle}{episode.publishedAt ? ` · ${new Date(episode.publishedAt).toLocaleDateString()}` : ''}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {episodes.length > 0 && <p className="sub">{t.officialEpisodeNote}</p>}
+          </section>
 
           <Comments malId={malId} t={t} />
         </div>
