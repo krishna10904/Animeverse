@@ -27,7 +27,6 @@ async function searchOfficialEpisodes(title) {
   const channels = getChannelIds();
   const results = await Promise.all(channels.map(async (channelId) => {
     const params = new URLSearchParams({
-      key: apiKey,
       part: 'snippet',
       type: 'video',
       channelId,
@@ -40,7 +39,7 @@ async function searchOfficialEpisodes(title) {
     });
 
     const res = await fetch(`${API_BASE}/search?${params}`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'x-goog-api-key': apiKey },
       signal: AbortSignal.timeout(12000),
     });
     if (!res.ok) {
